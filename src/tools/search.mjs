@@ -1,6 +1,66 @@
 import { z } from 'zod';
 import { ensureGraphClient, graphClient } from '../utils/graph-client.mjs';
 
+// Helper function to get all pages by iterating through notebooks, section groups, and sections
+async function getAllPagesFromSource(apiPath, sourceName) {
+  const allPages = [];
+
+  try {
+    // Get all notebooks
+    const notebooks = await graphClient.api(`${apiPath}/notebooks`).get();
+
+    // For each notebook, get section groups and sections
+    for (const notebook of notebooks.value) {
+      try {
+        // Get section groups in this notebook (like "_Indholdsbibliotek")
+        try {
+          const sectionGroups = await graphClient.api(`${apiPath}/notebooks/${notebook.id}/sectionGroups`).get();
+
+          // For each section group, get sections
+          for (const sectionGroup of sectionGroups.value) {
+            try {
+              const sections = await graphClient.api(`${apiPath}/sectionGroups/${sectionGroup.id}/sections`).get();
+
+              // For each section in section group, get pages
+              for (const section of sections.value) {
+                try {
+                  const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
+                  allPages.push(...pages.value);
+                } catch (error) {
+                  console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching sections from section group ${sectionGroup.displayName}:`, error.message);
+            }
+          }
+        } catch (error) {
+          // No section groups or error - that's ok, continue to regular sections
+        }
+
+        // Get sections directly in this notebook (not in section groups)
+        const sections = await graphClient.api(`${apiPath}/notebooks/${notebook.id}/sections`).get();
+
+        // For each section, get pages
+        for (const section of sections.value) {
+          try {
+            const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
+            allPages.push(...pages.value);
+          } catch (error) {
+            console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching sections from notebook ${notebook.displayName}:`, error.message);
+      }
+    }
+  } catch (error) {
+    console.error(`Error fetching notebooks from ${sourceName}:`, error.message);
+  }
+
+  return allPages;
+}
+
 export function registerSearchTools(server) {
   server.tool(
     "searchNotebooks",
@@ -89,15 +149,14 @@ export function registerSearchTools(server) {
 
   server.tool(
     "searchAllPages",
-    "Search for pages by title across both personal and all shared/Teams notebooks. Returns all matching pages with their location (personal or group name). Case-insensitive search. OPTIMIZED: Uses parallel searching and limits results for fast performance.",
+    "Search for pages by title across both personal and all shared/Teams notebooks. Returns all matching pages with their location (personal or group name). Case-insensitive search. Handles large notebooks by searching section-by-section.",
     {
-      searchTerm: z.string().describe("Text to search for in page titles"),
-      maxResults: z.number().optional().describe("Optional: Maximum number of results to return (default: 100). Use lower values for faster searches.")
+      searchTerm: z.string().describe("Text to search for in page titles")
     },
     async (params) => {
       try {
         await ensureGraphClient();
-        const { searchTerm, maxResults = 100 } = params;
+        const { searchTerm } = params;
         const searchLower = searchTerm.toLowerCase();
 
         const results = {
@@ -105,88 +164,80 @@ export function registerSearchTools(server) {
           groups: []
         };
 
-        // Fetch more pages than needed to ensure we find enough matches
-        const fetchLimit = Math.max(maxResults * 3, 300);
+        // Search personal pages using section-by-section approach
+        try {
+          console.error('Searching personal pages...');
+          const personalPages = await getAllPagesFromSource('/me/onenote', 'personal');
+          console.error(`Fetched ${personalPages.length} personal pages total`);
 
-        // Search personal pages
-        const personalPromise = graphClient
-          .api("/me/onenote/pages")
-          .top(fetchLimit)
-          .select("id,title,createdDateTime,lastModifiedDateTime")
-          .orderby("lastModifiedDateTime desc")
-          .get()
-          .then(personalPages => {
-            results.personal = personalPages.value
-              .filter(page => page.title && page.title.toLowerCase().includes(searchLower))
-              .slice(0, maxResults)
-              .map(page => ({
-                id: page.id,
-                title: page.title,
-                createdDateTime: page.createdDateTime,
-                lastModifiedDateTime: page.lastModifiedDateTime
-              }));
-          })
-          .catch(error => {
-            console.error("Error searching personal pages:", error.message);
-          });
+          results.personal = personalPages
+            .filter(page => page.title && page.title.toLowerCase().includes(searchLower))
+            .map(page => ({
+              id: page.id,
+              title: page.title,
+              createdDateTime: page.createdDateTime,
+              lastModifiedDateTime: page.lastModifiedDateTime
+            }));
 
-        // Search groups in parallel
-        const groupsPromise = graphClient
-          .api("/me/memberOf/$/microsoft.graph.group")
-          .get()
-          .then(async (groupsResponse) => {
-            const groupSearchPromises = groupsResponse.value.map(async (group) => {
-              try {
-                const groupPages = await graphClient
-                  .api(`/groups/${group.id}/onenote/pages`)
-                  .top(fetchLimit)
-                  .select("id,title,createdDateTime,lastModifiedDateTime")
-                  .orderby("lastModifiedDateTime desc")
-                  .get();
+          console.error(`Found ${results.personal.length} personal matches`);
+        } catch (error) {
+          console.error("Error searching personal pages:", error.message);
+        }
 
-                const matches = groupPages.value
-                  .filter(page => page.title && page.title.toLowerCase().includes(searchLower))
-                  .slice(0, maxResults)
-                  .map(page => ({
-                    id: page.id,
-                    title: page.title,
-                    createdDateTime: page.createdDateTime,
-                    lastModifiedDateTime: page.lastModifiedDateTime
-                  }));
+        // Search all group pages IN PARALLEL using section-by-section approach
+        try {
+          const groupsResponse = await graphClient
+            .api("/me/memberOf/$/microsoft.graph.group")
+            .get();
 
-                if (matches.length > 0) {
-                  return {
-                    groupId: group.id,
-                    groupName: group.displayName,
-                    pages: matches
-                  };
-                }
-                return null;
-              } catch (error) {
-                console.error(`Error searching pages in group ${group.id}:`, error.message);
-                return null;
+          console.error(`Searching ${groupsResponse.value.length} groups...`);
+
+          // Create promises for parallel execution
+          const groupSearchPromises = groupsResponse.value.map(async (group) => {
+            try {
+              const groupPages = await getAllPagesFromSource(`/groups/${group.id}/onenote`, group.displayName);
+
+              const matches = groupPages
+                .filter(page => page.title && page.title.toLowerCase().includes(searchLower))
+                .map(page => ({
+                  id: page.id,
+                  title: page.title,
+                  createdDateTime: page.createdDateTime,
+                  lastModifiedDateTime: page.lastModifiedDateTime
+                }));
+
+              if (matches.length > 0) {
+                console.error(`Found ${matches.length} matches in group: ${group.displayName}`);
+                return {
+                  groupId: group.id,
+                  groupName: group.displayName,
+                  pages: matches
+                };
               }
-            });
-
-            const groupResults = await Promise.all(groupSearchPromises);
-            results.groups = groupResults.filter(g => g !== null);
-          })
-          .catch(error => {
-            console.error("Error searching groups:", error.message);
+              return null;
+            } catch (error) {
+              console.error(`Error searching pages in group ${group.displayName}:`, error.message);
+              return null;
+            }
           });
 
-        // Wait for both personal and group searches to complete
-        await Promise.all([personalPromise, groupsPromise]);
+          // Wait for all to complete
+          const groupResults = await Promise.all(groupSearchPromises);
+          results.groups = groupResults.filter(g => g !== null);
+        } catch (error) {
+          console.error("Error searching group pages:", error.message);
+        }
 
         const totalCount = results.personal.length +
           results.groups.reduce((sum, g) => sum + g.pages.length, 0);
+
+        console.error(`Total matches found: ${totalCount}`);
 
         return {
           content: [{
             type: "text",
             text: JSON.stringify({
               searchTerm: searchTerm,
-              maxResults: maxResults,
               totalMatches: totalCount,
               results: results
             }, null, 2)
