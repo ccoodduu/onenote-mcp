@@ -12,7 +12,13 @@ const tokenFilePath = path.join(__dirname, '.access-token.txt');
 
 // Client ID for Microsoft Graph API access
 const clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph Explorer client ID
-const scopes = ['Notes.Read.All', 'Notes.ReadWrite.All', 'User.Read'];
+const scopes = [
+  'Notes.Read.All',
+  'Notes.ReadWrite.All',
+  'Sites.Read.All',     // For SharePoint sites and shared notebooks
+  'Group.Read.All',     // For Teams notebooks
+  'User.Read'
+];
 
 async function authenticate() {
   try {
