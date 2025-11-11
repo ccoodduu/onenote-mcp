@@ -1,30 +1,30 @@
 import { z } from 'zod';
-import { ensureGraphClient, graphClient } from '../utils/graph-client.mjs';
+import { ensureGraphClient, cachedApiCall } from '../utils/graph-client.mjs';
 
 // Helper function to get all pages by iterating through notebooks, section groups, and sections
 async function getAllPagesFromSource(apiPath, sourceName) {
   const allPages = [];
 
   try {
-    // Get all notebooks
-    const notebooks = await graphClient.api(`${apiPath}/notebooks`).get();
+    // Get all notebooks (CACHED)
+    const notebooks = await cachedApiCall(`${apiPath}/notebooks`);
 
     // For each notebook, get section groups and sections
     for (const notebook of notebooks.value) {
       try {
-        // Get section groups in this notebook (like "_Indholdsbibliotek")
+        // Get section groups in this notebook (like "_Indholdsbibliotek") (CACHED)
         try {
-          const sectionGroups = await graphClient.api(`${apiPath}/notebooks/${notebook.id}/sectionGroups`).get();
+          const sectionGroups = await cachedApiCall(`${apiPath}/notebooks/${notebook.id}/sectionGroups`);
 
           // For each section group, get sections
           for (const sectionGroup of sectionGroups.value) {
             try {
-              const sections = await graphClient.api(`${apiPath}/sectionGroups/${sectionGroup.id}/sections`).get();
+              const sections = await cachedApiCall(`${apiPath}/sectionGroups/${sectionGroup.id}/sections`);
 
               // For each section in section group, get pages
               for (const section of sections.value) {
                 try {
-                  const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
+                  const pages = await cachedApiCall(`${apiPath}/sections/${section.id}/pages`);
                   allPages.push(...pages.value);
                 } catch (error) {
                   console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
@@ -38,13 +38,13 @@ async function getAllPagesFromSource(apiPath, sourceName) {
           // No section groups or error - that's ok, continue to regular sections
         }
 
-        // Get sections directly in this notebook (not in section groups)
-        const sections = await graphClient.api(`${apiPath}/notebooks/${notebook.id}/sections`).get();
+        // Get sections directly in this notebook (not in section groups) (CACHED)
+        const sections = await cachedApiCall(`${apiPath}/notebooks/${notebook.id}/sections`);
 
         // For each section, get pages
         for (const section of sections.value) {
           try {
-            const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
+            const pages = await cachedApiCall(`${apiPath}/sections/${section.id}/pages`);
             allPages.push(...pages.value);
           } catch (error) {
             console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
@@ -80,7 +80,7 @@ export function registerSearchTools(server) {
         };
 
         try {
-          const personalNbs = await graphClient.api("/me/onenote/notebooks").get();
+          const personalNbs = await cachedApiCall("/me/onenote/notebooks");
           results.personal = personalNbs.value
             .filter(nb => nb.displayName.toLowerCase().includes(searchLower))
             .map(nb => ({
@@ -93,15 +93,11 @@ export function registerSearchTools(server) {
         }
 
         try {
-          const groupsResponse = await graphClient
-            .api("/me/memberOf/$/microsoft.graph.group")
-            .get();
+          const groupsResponse = await cachedApiCall("/me/memberOf/$/microsoft.graph.group");
 
           for (const group of groupsResponse.value) {
             try {
-              const groupNbs = await graphClient
-                .api(`/groups/${group.id}/onenote/notebooks`)
-                .get();
+              const groupNbs = await cachedApiCall(`/groups/${group.id}/onenote/notebooks`);
 
               const matches = groupNbs.value
                 .filter(nb => nb.displayName.toLowerCase().includes(searchLower))
@@ -170,7 +166,7 @@ export function registerSearchTools(server) {
         if (groupId) {
           // Group notebook
           apiPath = `/groups/${groupId}/onenote`;
-          const notebook = await graphClient.api(`${apiPath}/notebooks/${notebookId}`).get();
+          const notebook = await cachedApiCall(`${apiPath}/notebooks/${notebookId}`);
           notebookInfo = {
             id: notebook.id,
             name: notebook.displayName,
@@ -181,7 +177,7 @@ export function registerSearchTools(server) {
           // Try personal first
           try {
             apiPath = `/me/onenote`;
-            const notebook = await graphClient.api(`${apiPath}/notebooks/${notebookId}`).get();
+            const notebook = await cachedApiCall(`${apiPath}/notebooks/${notebookId}`);
             notebookInfo = {
               id: notebook.id,
               name: notebook.displayName,
@@ -189,14 +185,12 @@ export function registerSearchTools(server) {
             };
           } catch (personalError) {
             // Try to find it in groups
-            const groupsResponse = await graphClient
-              .api("/me/memberOf/$/microsoft.graph.group")
-              .get();
+            const groupsResponse = await cachedApiCall("/me/memberOf/$/microsoft.graph.group");
 
             for (const group of groupsResponse.value) {
               try {
                 apiPath = `/groups/${group.id}/onenote`;
-                const notebook = await graphClient.api(`${apiPath}/notebooks/${notebookId}`).get();
+                const notebook = await cachedApiCall(`${apiPath}/notebooks/${notebookId}`);
                 notebookInfo = {
                   id: notebook.id,
                   name: notebook.displayName,
@@ -219,46 +213,71 @@ export function registerSearchTools(server) {
         console.error(`Found notebook: ${notebookInfo.name}`);
 
         // Get all pages from this notebook
-        const allPages = [];
+        let allPages = [];
 
+        // FAST PATH: Try to get all pages directly from the notebook's parent (works for small notebooks)
         try {
-          // Get section groups
-          try {
-            const sectionGroups = await graphClient.api(`${apiPath}/notebooks/${notebookId}/sectionGroups`).get();
+          console.error('Trying fast path (direct page fetch from onenote)...');
+          const pagesResponse = await cachedApiCall(`${apiPath}/pages`);
+          // Filter to only pages from this notebook
+          allPages = pagesResponse.value.filter(page => {
+            // Pages have parentNotebook property with id
+            return page.parentNotebook && page.parentNotebook.id === notebookId;
+          });
+          console.error(`✓ Fast path succeeded: ${allPages.length} pages from this notebook`);
+        } catch (fastPathError) {
+          // Check if it's the "too many sections" error
+          if (fastPathError.message && fastPathError.message.includes('maximum sections')) {
+            console.error('Fast path failed (too many sections), using section-by-section fallback...');
 
-            for (const sectionGroup of sectionGroups.value) {
+            // SLOW PATH: Section-by-section approach for large notebooks
+            allPages = [];
+
+            try {
+              // Get section groups (CACHED)
               try {
-                const sections = await graphClient.api(`${apiPath}/sectionGroups/${sectionGroup.id}/sections`).get();
+                const sectionGroups = await cachedApiCall(`${apiPath}/notebooks/${notebookId}/sectionGroups`);
 
-                for (const section of sections.value) {
+                for (const sectionGroup of sectionGroups.value) {
                   try {
-                    const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
-                    allPages.push(...pages.value);
+                    const sections = await cachedApiCall(`${apiPath}/sectionGroups/${sectionGroup.id}/sections`);
+
+                    for (const section of sections.value) {
+                      try {
+                        const pages = await cachedApiCall(`${apiPath}/sections/${section.id}/pages`);
+                        allPages.push(...pages.value);
+                      } catch (error) {
+                        console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+                      }
+                    }
                   } catch (error) {
-                    console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+                    console.error(`Error fetching sections from section group ${sectionGroup.displayName}:`, error.message);
                   }
                 }
               } catch (error) {
-                console.error(`Error fetching sections from section group ${sectionGroup.displayName}:`, error.message);
+                // No section groups - that's ok
               }
-            }
-          } catch (error) {
-            // No section groups - that's ok
-          }
 
-          // Get sections directly in notebook
-          const sections = await graphClient.api(`${apiPath}/notebooks/${notebookId}/sections`).get();
+              // Get sections directly in notebook (CACHED)
+              const sections = await cachedApiCall(`${apiPath}/notebooks/${notebookId}/sections`);
 
-          for (const section of sections.value) {
-            try {
-              const pages = await graphClient.api(`${apiPath}/sections/${section.id}/pages`).get();
-              allPages.push(...pages.value);
+              for (const section of sections.value) {
+                try {
+                  const pages = await cachedApiCall(`${apiPath}/sections/${section.id}/pages`);
+                  allPages.push(...pages.value);
+                } catch (error) {
+                  console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+                }
+              }
+
+              console.error(`✓ Fallback succeeded: ${allPages.length} pages`);
             } catch (error) {
-              console.error(`Error fetching pages from section ${section.displayName}:`, error.message);
+              console.error(`Error fetching sections from notebook:`, error.message);
             }
+          } else {
+            // Some other error - rethrow
+            throw fastPathError;
           }
-        } catch (error) {
-          console.error(`Error fetching sections from notebook:`, error.message);
         }
 
         console.error(`Fetched ${allPages.length} total pages`);
