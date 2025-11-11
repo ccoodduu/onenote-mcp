@@ -26,13 +26,13 @@ const cache = new Map();
 
 // Cache TTL (time to live) in milliseconds
 const CACHE_TTL = {
-  groups: 10 * 60 * 1000,      // 10 minutes (rarely changes)
-  notebooks: 5 * 60 * 1000,     // 5 minutes (rarely changes)
-  sections: 5 * 60 * 1000,      // 5 minutes (rarely changes)
-  sectionGroups: 5 * 60 * 1000, // 5 minutes (rarely changes)
-  pages: 3 * 60 * 1000,         // 3 minutes (changes more often)
-  pageContent: 2 * 60 * 1000,   // 2 minutes (can change frequently)
-  default: 5 * 60 * 1000        // 5 minutes default
+  groups: 60 * 60 * 1000,       // 1 hour (rarely changes)
+  notebooks: 30 * 60 * 1000,    // 30 minutes (rarely changes)
+  sections: 30 * 60 * 1000,     // 30 minutes (rarely changes)
+  sectionGroups: 30 * 60 * 1000,// 30 minutes (rarely changes)
+  pages: 10 * 60 * 1000,        // 10 minutes (changes more often)
+  pageContent: 5 * 60 * 1000,   // 5 minutes (can change frequently)
+  default: 15 * 60 * 1000       // 15 minutes default
 };
 
 // Determine cache TTL based on API path

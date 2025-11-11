@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import open from 'open';
-import { ensureGraphClient, graphClient } from '../utils/graph-client.mjs';
+import { ensureGraphClient, graphClient, clearCache, getCacheStats } from '../utils/graph-client.mjs';
 
 export function registerActionTools(server) {
   server.tool(
@@ -69,6 +69,27 @@ export function registerActionTools(server) {
       } catch (error) {
         console.error("Error opening page:", error);
         throw new Error(`Failed to open page: ${error.message}`);
+      }
+    }
+  );
+
+  server.tool(
+    "clearCache",
+    "Clear the OneNote MCP cache to force fresh data from Microsoft Graph API. Use this if you've just updated something in OneNote and want to see the changes immediately without waiting for cache expiration.",
+    async () => {
+      try {
+        const statsBefore = getCacheStats();
+        clearCache();
+
+        return {
+          content: [{
+            type: "text",
+            text: `Cache cleared successfully!\n\nCleared ${statsBefore.entries} cached entries.\n\nAll subsequent requests will fetch fresh data from Microsoft Graph API.\n\nCache TTLs:\n- Groups: 1 hour\n- Notebooks/Sections: 30 minutes\n- Pages: 10 minutes\n- Page Content: 5 minutes`
+          }]
+        };
+      } catch (error) {
+        console.error("Error clearing cache:", error);
+        throw new Error(`Failed to clear cache: ${error.message}`);
       }
     }
   );
