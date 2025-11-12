@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { ensureGraphClient, graphClient, accessToken } from '../utils/graph-client.mjs';
 
 // Helper function to extract file attachments from HTML content
@@ -377,7 +380,7 @@ export function registerContentTools(server) {
 
   server.tool(
     "getPageAttachments",
-    "Fetch and view specific file attachments from a OneNote page (PDFs, Word docs, Excel files, etc.). Returns files as base64-encoded data that Claude can read. Use this after readPage shows you which attachments are available.",
+    "Fetch and read specific file attachments from a OneNote page (PDFs, Word docs, Excel files, etc.). Returns files that Claude can analyze. Use this after readPage shows you which attachments are available.",
     {
       pageId: z.string().describe("The ID of the page containing the attachments"),
       attachmentIndices: z.array(z.number()).describe("Array of attachment numbers to fetch (e.g., [1, 2] for first and second attachment)"),
@@ -488,25 +491,21 @@ export function registerContentTools(server) {
             // Get file data as buffer
             const arrayBuffer = await attachmentResponse.arrayBuffer();
             const fileBuffer = Buffer.from(arrayBuffer);
-            const base64Data = fileBuffer.toString('base64');
 
-            // Get mime type
-            let mimeType = attachment.type;
-            if (!mimeType || mimeType === 'unknown') {
-              mimeType = attachmentResponse.headers.get('content-type') || 'application/octet-stream';
+            // Create temp directory for OneNote attachments
+            const tmpDir = path.join(os.tmpdir(), 'onenote-mcp-attachments');
+            if (!fs.existsSync(tmpDir)) {
+              fs.mkdirSync(tmpDir, { recursive: true });
             }
+
+            // Save file to temp directory with sanitized filename
+            const sanitizedFilename = attachment.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const filePath = path.join(tmpDir, sanitizedFilename);
+            fs.writeFileSync(filePath, fileBuffer);
 
             content.push({
               type: "text",
-              text: `\n📎 Attachment ${index}: ${attachment.name} (${(fileBuffer.length / 1024).toFixed(1)} KB)`
-            });
-
-            content.push({
-              type: "resource",
-              resource: {
-                blob: base64Data,
-                mimeType: mimeType
-              }
+              text: `\n📎 Attachment ${index}: ${attachment.name} (${(fileBuffer.length / 1024).toFixed(1)} KB)\n\nFile saved to: ${filePath}\n\nYou can now read this file using the Read tool.`
             });
 
           } catch (error) {
