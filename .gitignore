@@ -58,5 +58,14 @@ Thumbs.db
 # Backup files and test scripts
 *.backup
 test-*.js
+test-*.mjs
+debug-*.mjs
+find-*.mjs
 list-tools.js
 typescript-sdk/
+
+# Claude Code config
+.claude/
+
+# Temporary files
+NUL
