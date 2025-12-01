@@ -46,7 +46,7 @@ export function registerBrowsingTools(server) {
         }
 
         try {
-          const personalNbs = await graphClient.api("/me/onenote/notebooks").get();
+          const personalNbs = await graphClient.api("/me/onenote/notebooks").top(999).get();
           results.personal = personalNbs.value.map(nb => ({
             id: nb.id,
             name: nb.displayName,
@@ -57,11 +57,11 @@ export function registerBrowsingTools(server) {
         }
 
         try {
-          const groupsResponse = await graphClient.api("/me/memberOf/$/microsoft.graph.group").get();
+          const groupsResponse = await graphClient.api("/me/memberOf/$/microsoft.graph.group").top(999).get();
 
           for (const group of groupsResponse.value) {
             try {
-              const groupNbs = await graphClient.api(`/groups/${group.id}/onenote/notebooks`).get();
+              const groupNbs = await graphClient.api(`/groups/${group.id}/onenote/notebooks`).top(999).get();
 
               if (groupNbs.value.length > 0) {
                 results.groups.push({
@@ -148,8 +148,8 @@ export function registerBrowsingTools(server) {
 
         if (groupId && notebookId) {
           const [sections, sectionGroups] = await Promise.all([
-            graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebookId}/sections`).get(),
-            graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebookId}/sectionGroups`).get()
+            graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebookId}/sections`).top(999).get(),
+            graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebookId}/sectionGroups`).top(999).get()
           ]);
 
           const items = [
@@ -183,13 +183,13 @@ export function registerBrowsingTools(server) {
 
         if (groupId) {
           const allItems = [];
-          const notebooks = await graphClient.api(`/groups/${groupId}/onenote/notebooks`).get();
+          const notebooks = await graphClient.api(`/groups/${groupId}/onenote/notebooks`).top(999).get();
 
           for (const notebook of notebooks.value) {
             try {
               const [sections, sectionGroups] = await Promise.all([
-                graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebook.id}/sections`).get(),
-                graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebook.id}/sectionGroups`).get()
+                graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebook.id}/sections`).top(999).get(),
+                graphClient.api(`/groups/${groupId}/onenote/notebooks/${notebook.id}/sectionGroups`).top(999).get()
               ]);
 
               sectionGroups.value.forEach(sg => {
@@ -232,7 +232,7 @@ export function registerBrowsingTools(server) {
         }
 
         if (notebookId) {
-          const sections = await graphClient.api(`/me/onenote/notebooks/${notebookId}/sections`).get();
+          const sections = await graphClient.api(`/me/onenote/notebooks/${notebookId}/sections`).top(999).get();
 
           return {
             content: [{
@@ -250,7 +250,7 @@ export function registerBrowsingTools(server) {
           };
         }
 
-        const response = await graphClient.api(`/me/onenote/sections`).get();
+        const response = await graphClient.api(`/me/onenote/sections`).top(999).get();
 
         return {
           content: [{
@@ -289,6 +289,7 @@ export function registerBrowsingTools(server) {
         if (groupId && sectionId) {
           const pages = await graphClient
             .api(`/groups/${groupId}/onenote/sections/${sectionId}/pages`)
+            .top(999)
             .get();
 
           return {
@@ -313,6 +314,7 @@ export function registerBrowsingTools(server) {
         if (sectionId) {
           const pages = await graphClient
             .api(`/me/onenote/sections/${sectionId}/pages`)
+            .top(999)
             .get();
 
           return {
@@ -336,6 +338,7 @@ export function registerBrowsingTools(server) {
         if (groupId) {
           const pages = await graphClient
             .api(`/groups/${groupId}/onenote/pages`)
+            .top(999)
             .get();
 
           return {
@@ -356,7 +359,7 @@ export function registerBrowsingTools(server) {
           };
         }
 
-        const pages = await graphClient.api("/me/onenote/pages").get();
+        const pages = await graphClient.api("/me/onenote/pages").top(999).get();
 
         return {
           content: [{
@@ -403,7 +406,7 @@ export function registerBrowsingTools(server) {
           };
 
           try {
-            const personalNbs = await graphClient.api("/me/onenote/notebooks").get();
+            const personalNbs = await graphClient.api("/me/onenote/notebooks").top(999).get();
             results.personal = personalNbs.value.map(nb => ({
               type: "notebook",
               source: "personal",
@@ -415,11 +418,11 @@ export function registerBrowsingTools(server) {
           }
 
           try {
-            const groupsResponse = await graphClient.api("/me/memberOf/$/microsoft.graph.group").get();
+            const groupsResponse = await graphClient.api("/me/memberOf/$/microsoft.graph.group").top(999).get();
 
             for (const group of groupsResponse.value) {
               try {
-                const groupNbs = await graphClient.api(`/groups/${group.id}/onenote/notebooks`).get();
+                const groupNbs = await graphClient.api(`/groups/${group.id}/onenote/notebooks`).top(999).get();
 
                 if (groupNbs.value.length > 0) {
                   results.groups.push({
@@ -452,7 +455,7 @@ export function registerBrowsingTools(server) {
         }
 
         if (groupId && !notebookId && !sectionGroupId && !sectionId) {
-          const notebooks = await graphClient.api(`/groups/${groupId}/onenote/notebooks`).get();
+          const notebooks = await graphClient.api(`/groups/${groupId}/onenote/notebooks`).top(999).get();
           return {
             content: [{
               type: "text",
@@ -476,8 +479,8 @@ export function registerBrowsingTools(server) {
             : `/me/onenote/notebooks/${notebookId}`;
 
           const [sections, sectionGroups] = await Promise.all([
-            graphClient.api(`${endpoint}/sections`).get(),
-            graphClient.api(`${endpoint}/sectionGroups`).get()
+            graphClient.api(`${endpoint}/sections`).top(999).get(),
+            graphClient.api(`${endpoint}/sectionGroups`).top(999).get()
           ]);
 
           const items = [
@@ -514,7 +517,7 @@ export function registerBrowsingTools(server) {
             ? `/groups/${groupId}/onenote/sectionGroups/${sectionGroupId}`
             : `/me/onenote/sectionGroups/${sectionGroupId}`;
 
-          const sections = await graphClient.api(`${endpoint}/sections`).get();
+          const sections = await graphClient.api(`${endpoint}/sections`).top(999).get();
 
           return {
             content: [{
@@ -539,7 +542,7 @@ export function registerBrowsingTools(server) {
             ? `/groups/${groupId}/onenote/sections/${sectionId}`
             : `/me/onenote/sections/${sectionId}`;
 
-          const pages = await graphClient.api(`${endpoint}/pages`).get();
+          const pages = await graphClient.api(`${endpoint}/pages`).top(999).get();
 
           return {
             content: [{

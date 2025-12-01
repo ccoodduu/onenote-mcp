@@ -3,6 +3,8 @@ import { DeviceCodeCredential } from '@azure/identity';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import open from 'open';
+import clipboardy from 'clipboardy';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,16 +202,28 @@ export async function createGraphClient() {
   }
 
   // No token or invalid token - start device code flow
+  let deviceCodeInfo = null;
+
   const credential = new DeviceCodeCredential({
     clientId: clientId,
     userPromptCallback: (info) => {
+      deviceCodeInfo = info;
       console.error('\n' + info.message);
+
+      // Copy code to clipboard
+      clipboardy.write(info.userCode).catch(err => {
+        console.error('Failed to copy code to clipboard:', err.message);
+      });
+
+      // Automatically open the browser
+      open(info.verificationUri).catch(err => {
+        console.error('Failed to open browser:', err.message);
+      });
     }
   });
 
-  try {
-    const tokenResponse = await credential.getToken(scopes);
-
+  // Start the token acquisition in the background (don't wait for it)
+  credential.getToken(scopes).then(tokenResponse => {
     accessToken = tokenResponse.token;
     fs.writeFileSync(tokenFilePath, JSON.stringify({ token: accessToken }));
 
@@ -221,10 +235,43 @@ export async function createGraphClient() {
       }
     });
 
-    return { type: 'device_code', client: graphClient };
-  } catch (error) {
+    console.error('Authentication completed successfully!');
+  }).catch(error => {
     console.error('Authentication error:', error);
-    throw new Error(`Authentication failed: ${error.message}`);
+  });
+
+  // Return immediately with the device code info
+  return { type: 'device_code', deviceCodeInfo };
+}
+
+// Check if authentication is complete by looking for a valid token file
+export async function checkAuthStatus() {
+  try {
+    if (fs.existsSync(tokenFilePath)) {
+      const tokenData = fs.readFileSync(tokenFilePath, 'utf8');
+      try {
+        const parsedToken = JSON.parse(tokenData);
+        if (parsedToken.token) {
+          // Token exists, verify it works
+          const testClient = Client.initWithMiddleware({
+            authProvider: {
+              getAccessToken: async () => {
+                return parsedToken.token;
+              }
+            }
+          });
+
+          await testClient.api('/me').get();
+          return true; // Token is valid
+        }
+      } catch (parseError) {
+        // Invalid token or API call failed
+        return false;
+      }
+    }
+    return false; // No token file
+  } catch (error) {
+    return false;
   }
 }
 
