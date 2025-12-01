@@ -203,6 +203,10 @@ export async function createGraphClient() {
 
   // No token or invalid token - start device code flow
   let deviceCodeInfo = null;
+  let deviceCodePromiseResolve;
+  const deviceCodePromise = new Promise(resolve => {
+    deviceCodePromiseResolve = resolve;
+  });
 
   const credential = new DeviceCodeCredential({
     clientId: clientId,
@@ -219,6 +223,9 @@ export async function createGraphClient() {
       open(info.verificationUri).catch(err => {
         console.error('Failed to open browser:', err.message);
       });
+
+      // Resolve the promise so we can return the info
+      deviceCodePromiseResolve(info);
     }
   });
 
@@ -240,7 +247,8 @@ export async function createGraphClient() {
     console.error('Authentication error:', error);
   });
 
-  // Return immediately with the device code info
+  // Wait for the device code callback to be called, then return
+  await deviceCodePromise;
   return { type: 'device_code', deviceCodeInfo };
 }
 
@@ -272,6 +280,32 @@ export async function checkAuthStatus() {
     return false; // No token file
   } catch (error) {
     return false;
+  }
+}
+
+// Logout function to clear stored token
+export function logout() {
+  try {
+    let hadToken = false;
+
+    // Clear in-memory variables
+    if (accessToken || graphClient) {
+      accessToken = null;
+      graphClient = null;
+      hadToken = true;
+    }
+
+    // Delete token file if it exists
+    if (fs.existsSync(tokenFilePath)) {
+      fs.unlinkSync(tokenFilePath);
+      hadToken = true;
+      console.error('Token file deleted');
+    }
+
+    return { success: hadToken };
+  } catch (error) {
+    console.error('Error during logout:', error);
+    throw error;
   }
 }
 
