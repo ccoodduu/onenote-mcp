@@ -5,12 +5,7 @@
   "type": "module",
   "main": "onenote-mcp.mjs",
   "scripts": {
-    "start": "node onenote-mcp.mjs",
-    "auth": "node authenticate.js",
-    "list-notebooks": "node simple-onenote.js",
-    "list-sections": "node list-sections.js",
-    "list-pages": "node list-pages.js",
-    "create-page": "node create-page.js"
+    "start": "node onenote-mcp.mjs"
   },
   "dependencies": {
     "@azure/identity": "^2.1.0",

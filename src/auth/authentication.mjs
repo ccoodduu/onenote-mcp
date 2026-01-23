@@ -17,7 +17,7 @@ export function registerAuthenticationTools(server) {
             message += `🔑 Code: ${info.userCode}\n\n`;
             message += `✅ Code has been copied to your clipboard!\n`;
             message += `The browser should open automatically. If not, click the URL above and paste the code.\n\n`;
-            message += `After authenticating, use the "waitForAuth" tool to wait for completion.`;
+            message += `Right after showing the code and URL to the user instead of stopping and waiting for user input, use the "waitForAuth" tool to wait for completion.`;
           } else {
             message += "Please check the console for the URL and code.";
           }
