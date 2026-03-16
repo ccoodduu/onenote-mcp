@@ -11,7 +11,7 @@
     "@azure/identity": "^2.1.0",
     "@azure/msal-node": "^3.5.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
-    "@modelcontextprotocol/sdk": "^1.21.1",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "clipboardy": "^5.0.0",
     "dotenv": "^16.0.0",
     "jsdom": "^26.0.0",
