@@ -1,11 +1,31 @@
 {
   "name": "mcp-server-onenote",
-  "version": "0.1.0",
-  "description": "OneNote MCP Server Implementation with Device Code Authentication",
+  "version": "1.0.0",
+  "description": "MCP server for Microsoft OneNote — browse, read, search, and navigate notebooks from AI assistants",
   "type": "module",
   "main": "onenote-mcp.mjs",
+  "bin": {
+    "mcp-server-onenote": "onenote-mcp.mjs"
+  },
+  "files": [
+    "onenote-mcp.mjs",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node onenote-mcp.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ccoodduu/onenote-mcp-unified.git"
+  },
+  "homepage": "https://github.com/ccoodduu/onenote-mcp-unified#readme",
+  "bugs": {
+    "url": "https://github.com/ccoodduu/onenote-mcp-unified/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@azure/identity": "^2.1.0",
@@ -21,9 +41,13 @@
   "keywords": [
     "mcp",
     "onenote",
-    "modelcontextprotocol",
-    "device-code-auth"
+    "model-context-protocol",
+    "microsoft",
+    "graph-api",
+    "ai",
+    "claude",
+    "cursor"
   ],
-  "author": "Zubeid Hendricks",
+  "author": "ccoodduu",
   "license": "MIT"
 }
