@@ -18,11 +18,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ccoodduu/onenote-mcp-unified.git"
+    "url": "git+https://github.com/ccoodduu/onenote-mcp.git"
   },
-  "homepage": "https://github.com/ccoodduu/onenote-mcp-unified#readme",
+  "homepage": "https://github.com/ccoodduu/onenote-mcp#readme",
   "bugs": {
-    "url": "https://github.com/ccoodduu/onenote-mcp-unified/issues"
+    "url": "https://github.com/ccoodduu/onenote-mcp/issues"
   },
   "engines": {
     "node": ">=18.0.0"

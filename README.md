@@ -177,8 +177,8 @@ AI: [calls openPage] Opened "Q2 Roadmap" in your browser
 ## Development
 
 ```bash
-git clone https://github.com/ccoodduu/onenote-mcp-unified.git
-cd onenote-mcp-unified
+git clone https://github.com/ccoodduu/onenote-mcp.git
+cd onenote-mcp
 npm install
 npm start
 ```
